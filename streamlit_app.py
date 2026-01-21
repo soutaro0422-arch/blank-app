@@ -1,89 +1,96 @@
 import streamlit as st
-import random
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
+import time
 
 # --- ページ設定 ---
-st.set_page_config(
-    page_title="最適ルート検索アプリ",
-    page_icon="🚆",
-    layout="centered"
-)
+st.set_page_config(page_title="ルート・運賃概算アプリ", page_icon="🚄")
 
-# --- 関数: ルート検索の模擬ロジック ---
-# 実際にはここでGoogle Maps APIなどを叩きます
-def search_routes(origin, destination):
-    # API連携までのプレースホルダーとして、ランダムな値を返します
-    # 本番環境ではAPIからのレスポンスを整形して返してください
-    base_price = random.randint(3, 15) * 100
-    base_time = random.randint(15, 120)
+# --- ロジック: 距離から金額と時間を推測する ---
+def calculate_estimate(origin_name, destination_name):
+    geolocator = Nominatim(user_agent="my_streamlit_app")
     
-    results = [
-        {
-            "type": "早さ優先",
-            "mode": "新幹線/特急",
-            "duration": f"{base_time}分",
-            "cost": f"¥{base_price * 2:,}",
-            "details": f"{origin}駅 -> {destination}駅 (直通)"
-        },
-        {
-            "type": "安さ優先",
-            "mode": "電車/バス",
-            "duration": f"{int(base_time * 1.5)}分",
-            "cost": f"¥{base_price:,}",
-            "details": f"{origin}駅 -> (乗り換え1回) -> {destination}駅"
-        },
-        {
-            "type": "快適さ優先",
-            "mode": "タクシー",
-            "duration": f"{int(base_time * 0.8)}分",
-            "cost": f"¥{base_price * 10:,}",
-            "details": "ドア・ツー・ドア"
-        }
-    ]
-    return results
+    try:
+        # 1. 住所/駅名から緯度経度を取得
+        loc_origin = geolocator.geocode(origin_name)
+        loc_dest = geolocator.geocode(destination_name)
+        
+        if not loc_origin or not loc_dest:
+            return None, "場所が見つかりませんでした。駅名や県名を含めて試してください。"
+
+        # 2. 直線距離を計算 (km)
+        coords_origin = (loc_origin.latitude, loc_origin.longitude)
+        coords_dest = (loc_dest.latitude, loc_dest.longitude)
+        distance_km = geodesic(coords_origin, coords_dest).km
+        
+        # 3. 移動手段ごとの係数設定 (あくまで概算用の目安です)
+        # 新幹線: 平均時速200km, 40円/km (指定席相当) + 基本賃
+        # 在来線: 平均時速60km, 15円/km
+        # タクシー: 平均時速40km, 300円/km (長距離だと非現実的ですが計算として)
+        
+        results = [
+            {
+                "mode": "新幹線/特急 (推奨)",
+                "price": int(distance_km * 40 + 1000),  # 距離x単価+基本料
+                "minutes": int((distance_km / 200) * 60 + 20), # 距離/速度+乗り換え時間
+                "desc": "スピード重視"
+            },
+            {
+                "mode": "在来線/バス",
+                "price": int(distance_km * 12 + 500),
+                "minutes": int((distance_km / 50) * 60 + 40),
+                "desc": "安さ重視"
+            },
+            {
+                "mode": "タクシー/車",
+                "price": int(distance_km * 350 + 700),
+                "minutes": int((distance_km / 40) * 60),
+                "desc": "プライベート"
+            }
+        ]
+        
+        return results, f"直線距離: 約{int(distance_km)}km"
+
+    except Exception as e:
+        return None, f"エラーが発生しました: {e}"
 
 # --- UI構築 ---
-st.title("🚆 スマート移動ルート検索")
-st.markdown("出発地と目的地を入力すると、最適な移動手段を提案します。")
+st.title("🚄 距離ベース運賃概算アプリ")
+st.caption("Google Maps APIを使わず、直線距離から一般的な相場を計算します")
 
-# 入力フォーム
-with st.form("route_form"):
+with st.form("search_form"):
     col1, col2 = st.columns(2)
     with col1:
-        origin = st.text_input("出発地", placeholder="例: 東京駅")
+        origin = st.text_input("出発地", "熊本駅")
     with col2:
-        destination = st.text_input("目的地", placeholder="例: 大阪駅")
+        destination = st.text_input("目的地", "大阪駅")
     
-    submitted = st.form_submit_button("検索開始")
+    submitted = st.form_submit_button("検索")
 
-# 結果表示
 if submitted:
-    if not origin or not destination:
-        st.error("出発地と目的地を両方入力してください。")
-    else:
-        st.divider()
-        st.subheader(f"📍 {origin} から {destination} へのルート")
+    with st.spinner("距離を計算中..."):
+        # ジオコーディングAPIへの負荷を減らすため少し待機
+        time.sleep(1)
+        data, message = calculate_estimate(origin, destination)
+    
+    if data:
+        st.success(f"計算完了！ ({message})")
         
-        # 検索処理（模擬）を実行
-        routes = search_routes(origin, destination)
-        
-        # 結果をカード風に表示
-        for route in routes:
+        # 結果表示
+        for item in data:
             with st.container():
-                st.markdown(f"### {route['type']} ({route['mode']})")
-                col_res1, col_res2 = st.columns(2)
+                # カードのような見た目にする
+                st.subheader(f"{item['mode']}")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("予想金額", f"約 ¥{item['price']:,}")
                 
-                with col_res1:
-                    st.metric("所要時間", route['duration'])
-                with col_res2:
-                    st.metric("料金", route['cost'])
+                # 時間の表示形式を整える (例: 150分 -> 2時間30分)
+                hours = item['minutes'] // 60
+                mins = item['minutes'] % 60
+                time_str = f"{hours}時間{mins}分" if hours > 0 else f"{mins}分"
                 
-                st.info(f"ルート詳細: {route['details']}")
-                st.markdown("---")
-
-# --- サイドバー（補足情報） ---
-with st.sidebar:
-    st.header("使い方")
-    st.write("1. 出発地を入力")
-    st.write("2. 目的地を入力")
-    st.write("3. 検索ボタンをクリック")
-    st.warning("※現在はデモモードのため、表示される時間と金額はシミュレーション値です。")
+                c2.metric("所要時間", time_str)
+                c3.write(item['desc'])
+                st.divider()
+    else:
+        st.error(message)
