@@ -18,6 +18,7 @@ if "db_test_done" not in st.session_state:
     st.session_state["db_test_done"] = True
     st.success("✅ Supabaseにテスト書き込みできました")
 
+
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import time
