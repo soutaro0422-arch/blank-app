@@ -106,3 +106,44 @@ if submitted:
             st.divider()
     else:
         st.error(message)
+
+import pandas as pd
+
+st.subheader("🕘 直近の検索履歴（10件）")
+
+try:
+    res = (
+        sb.table("route_queries")
+        .select("created_at,origin,destination,distance_km,error")
+        .eq("session_id", st.session_state["session_id"])
+        .order("created_at", desc=True)
+        .limit(10)
+        .execute()
+    )
+
+    rows = res.data if res and hasattr(res, "data") else []
+
+    if not rows:
+        st.info("まだ履歴がありません。上で検索するとここに表示されます。")
+    else:
+        df = pd.DataFrame(rows)
+
+        # 表示用に整形
+        if "created_at" in df.columns:
+            df["created_at"] = df["created_at"].astype(str).str.replace("T", " ").str.replace("+00:00", "")
+
+        if "distance_km" in df.columns:
+            df["distance_km"] = df["distance_km"].apply(lambda x: None if x is None else round(float(x), 1))
+
+        df = df.rename(columns={
+            "created_at": "日時",
+            "origin": "出発地",
+            "destination": "目的地",
+            "distance_km": "距離(km)",
+            "error": "エラー",
+        })
+
+        st.dataframe(df, use_container_width=True)
+
+except Exception as e:
+    st.warning(f"履歴の取得に失敗: {e}")
