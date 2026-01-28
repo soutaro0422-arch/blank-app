@@ -1,3 +1,22 @@
+from supabase import create_client
+import uuid
+
+# Supabase接続（Secretsから読む）
+sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+# 1行INSERTテスト（起動時に1回だけ）
+if "db_test_done" not in st.session_state:
+    sb.table("route_queries").insert({
+        "session_id": str(uuid.uuid4()),
+        "origin": "テスト出発",
+        "destination": "テスト到着",
+        "distance_km": 123.4,
+        "result": {"ok": True},
+        "error": None
+    }).execute()
+    st.session_state["db_test_done"] = True
+    st.success("✅ Supabaseにテスト書き込みできました")
+
 import streamlit as st
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
