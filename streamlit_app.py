@@ -1,5 +1,6 @@
-from supabase import create_client
+import streamlit as st
 import uuid
+from supabase import create_client
 
 # Supabase接続（Secretsから読む）
 sb = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
@@ -17,7 +18,6 @@ if "db_test_done" not in st.session_state:
     st.session_state["db_test_done"] = True
     st.success("✅ Supabaseにテスト書き込みできました")
 
-import streamlit as st
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import time
